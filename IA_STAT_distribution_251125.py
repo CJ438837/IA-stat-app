@@ -4,23 +4,21 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import shapiro, kstest, probplot
 from fitter import Fitter
+import streamlit as st
+from io import BytesIO
 
-def advanced_distribution_analysis(df, types_df, output_folder="distribution_plots"):
+def advanced_distribution_analysis(df, types_df):
     """
     Analyse la distribution des variables numériques et propose les distributions les plus probables.
+    Affiche directement les graphiques dans Streamlit.
 
     Args:
-        df (DataFrame) : données nettoyées
-        types_df (DataFrame) : tableau des types détectés
-        output_folder (str) : dossier où enregistrer les graphiques
+        df (pd.DataFrame) : données nettoyées
+        types_df (pd.DataFrame) : tableau des types détectés
 
     Returns:
-        DataFrame : tableau récapitulatif des tests de normalité et distribution la plus probable
+        pd.DataFrame : tableau récapitulatif des tests de normalité et distribution la plus probable
     """
-    import os
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    
     results = []
     num_vars = types_df[types_df['type'] == "numérique"]['variable'].tolist()
 
@@ -43,24 +41,17 @@ def advanced_distribution_analysis(df, types_df, output_folder="distribution_plo
         # --- 2️⃣ Détection distribution probable ---
         try:
             if np.all(col_data == col_data.astype(int)):
-                # Discrètes → poisson, binomiale
                 f = Fitter(col_data, distributions=['poisson', 'binom'])
             else:
-                # Continues → normale, uniforme, exponentielle, lognormale
                 f = Fitter(col_data, distributions=['norm', 'expon', 'lognorm', 'uniform'])
             f.fit()
 
             summary_df = f.summary()
             if not summary_df.empty:
-                if 'Distribution' in summary_df.columns:
-                    best_fit = summary_df['Distribution'].iloc[0]
-                elif 'distribution' in summary_df.columns:
-                    best_fit = summary_df['distribution'].iloc[0]
-                else:
-                    best_fit = "unknown"
+                best_fit = summary_df.iloc[0,0]  # première distribution
             else:
                 best_fit = "unknown"
-        except Exception as e:
+        except Exception:
             best_fit = "unknown"
 
         results.append({
@@ -75,6 +66,7 @@ def advanced_distribution_analysis(df, types_df, output_folder="distribution_plo
 
         # --- 3️⃣ Graphiques ---
         plt.figure(figsize=(12,5))
+        
         # Histogramme + KDE
         plt.subplot(1,2,1)
         if np.all(col_data == col_data.astype(int)):
@@ -92,7 +84,12 @@ def advanced_distribution_analysis(df, types_df, output_folder="distribution_plo
         plt.title(f"{col} - QQ Plot")
 
         plt.tight_layout()
-        plt.savefig(f"{output_folder}/{col}_distribution.png")
+        
+        # Affichage Streamlit
+        buf = BytesIO()
+        plt.savefig(buf, format="png")
+        buf.seek(0)
+        st.image(buf, caption=f"{col} - Distribution et QQ Plot", use_column_width=True)
         plt.close()
 
     return pd.DataFrame(results)
