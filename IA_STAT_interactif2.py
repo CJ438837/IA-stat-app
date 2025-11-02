@@ -21,7 +21,7 @@ def rechercher_pubmed_test(test_name, mots_cles, email="votre.email@example.com"
     liens = [f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" for pmid in pmids]
     return liens
 
-# --- Fonction interactive complète ---
+# --- Fonction interactive complète corrigée ---
 def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     num_vars = types_df[types_df['type']=="numérique"]['variable'].tolist()
     cat_vars = types_df[types_df['type'].isin(['catégorielle','binaire'])]['variable'].tolist()
@@ -43,12 +43,13 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
 
         with st.expander(f"{num} vs {cat}"):
             key_test = f"{num}_{cat}"
-            test_name = st.selectbox("Choisir le test :", test_options, index=0, key=key_test)
+            test_name = st.selectbox("Choisir le test :", test_options, key=key_test)
 
             apparie = False
             if test_name in ["t-test","Mann-Whitney"]:
                 key_apparie = f"apparie_{num}_{cat}"
-                apparie = st.radio("Données appariées ?", [False, True], key=key_apparie)
+                st.radio("Données appariées ?", [False, True], index=0, key=key_apparie)
+                apparie = st.session_state.get(key_apparie, False)
 
             # PubMed
             liens = rechercher_pubmed_test(test_name, mots_cles)
@@ -84,7 +85,7 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                 except Exception as e:
                     st.error(f"Erreur : {e}")
 
-    # --- 2️⃣ Corrélations numériques ---
+    # --- 2️⃣ Deux variables numériques ---
     st.subheader("2️⃣ Corrélations numériques")
     for var1, var2 in itertools.combinations(num_vars, 2):
         verdict1 = distribution_df.loc[distribution_df['variable']==var1, 'verdict'].values[0]
@@ -109,7 +110,7 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                 ax.set_title(f"Corrélation ({test_type}) : {var1} vs {var2}")
                 st.pyplot(fig)
 
-    # --- 3️⃣ Variables catégorielles ---
+    # --- 3️⃣ Deux variables catégorielles ---
     st.subheader("3️⃣ Variables catégorielles")
     for var1, var2 in itertools.combinations(cat_vars, 2):
         with st.expander(f"{var1} vs {var2}"):
@@ -142,10 +143,8 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     # --- 4️⃣ Régression linéaire multiple ---
     st.subheader("4️⃣ Régression linéaire multiple")
     key_linreg = "execute_linreg"
-    if key_linreg not in st.session_state:
-        st.session_state[key_linreg] = False
-    st.session_state[key_linreg] = st.checkbox("Exécuter régression linéaire multiple", key=key_linreg)
-    if st.session_state[key_linreg] and len(num_vars) > 1:
+    st.checkbox("Exécuter régression linéaire multiple", key=key_linreg)
+    if st.session_state.get(key_linreg, False) and len(num_vars) > 1:
         X = df[num_vars].dropna()
         cible = st.selectbox("Variable dépendante :", num_vars)
         y = X[cible]
@@ -181,10 +180,8 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     # --- 5️⃣ PCA ---
     st.subheader("5️⃣ Analyse en Composantes Principales (PCA)")
     key_pca = "execute_pca"
-    if key_pca not in st.session_state:
-        st.session_state[key_pca] = False
-    st.session_state[key_pca] = st.checkbox("Exécuter PCA", key=key_pca)
-    if st.session_state[key_pca] and len(num_vars) > 1:
+    st.checkbox("Exécuter PCA", key=key_pca)
+    if st.session_state.get(key_pca, False) and len(num_vars) > 1:
         X_scaled = StandardScaler().fit_transform(df[num_vars].dropna())
         pca = PCA()
         components = pca.fit_transform(X_scaled)
@@ -206,10 +203,8 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     # --- 6️⃣ MCA ---
     st.subheader("6️⃣ Analyse des Correspondances Multiples (MCA)")
     key_mca = "execute_mca"
-    if key_mca not in st.session_state:
-        st.session_state[key_mca] = False
-    st.session_state[key_mca] = st.checkbox("Exécuter MCA", key=key_mca)
-    if st.session_state[key_mca] and len(cat_vars) > 1:
+    st.checkbox("Exécuter MCA", key=key_mca)
+    if st.session_state.get(key_mca, False) and len(cat_vars) > 1:
         try:
             import prince
             df_cat = df[cat_vars].fillna("Missing")
@@ -259,8 +254,8 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     for cat in cat_vars:
         if df[cat].dropna().nunique()==2:
             key_log = f"logreg_{cat}"
-            st.session_state[key_log] = st.checkbox(f"Exécuter régression logistique : {cat}", key=key_log)
-            if st.session_state[key_log]:
+            st.checkbox(f"Exécuter régression logistique : {cat}", key=key_log)
+            if st.session_state.get(key_log, False):
                 X = df[num_vars].dropna()
                 y = df[cat].loc[X.index]
                 model = LogisticRegression(max_iter=1000)
