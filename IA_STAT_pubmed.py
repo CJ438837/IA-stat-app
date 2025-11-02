@@ -1,6 +1,4 @@
 import re
-from deep_translator import GoogleTranslator
-keywords_en = [GoogleTranslator(source='fr', target='en').translate(word) for word in keywords_fr]
 from Bio import Entrez
 
 # --- Config PubMed ---
@@ -18,13 +16,9 @@ stopwords_fr = set([
 ])
 keywords_fr = [w for w in tokens if w not in stopwords_fr]
 
-# --- Traduction en anglais ---
-translator = Translator()
-keywords_en = [translator.translate(word, src='fr', dest='en').text for word in keywords_fr]
-query = " OR ".join(keywords_en)
+query = " OR ".join(keywords_fr)
 
 print(f"\nMots-clés français : {keywords_fr}")
-print(f"Mots-clés traduits anglais : {keywords_en}")
 print(f"Requête PubMed : {query}")
 
 # --- Recherche PubMed (max 10 résultats) ---
