@@ -1,12 +1,9 @@
-import subprocess
-import sys
+from deep_translator import GoogleTranslator
 
-subprocess.check_call([sys.executable, "-m", "pip", "install", "googletrans==4.0.0-rc1"])
-
+keywords_en = [GoogleTranslator(source='fr', target='en').translate(word) for word in keywords_fr]
 import streamlit as st
 import pandas as pd
 import re
-from googletrans import Translator
 from Bio import Entrez
 
 # === Configuration ===
