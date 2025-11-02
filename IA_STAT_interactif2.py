@@ -21,7 +21,7 @@ def rechercher_pubmed_test(test_name, mots_cles, email="votre.email@example.com"
     liens = [f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" for pmid in pmids]
     return liens
 
-# --- Fonction interactive complète ---
+# --- Fonction interactive complète (version stable) ---
 def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     num_vars = types_df[types_df['type']=="numérique"]['variable'].tolist()
     cat_vars = types_df[types_df['type'].isin(['catégorielle','binaire'])]['variable'].tolist()
@@ -42,24 +42,33 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
             test_options = ["unknown"]
 
         with st.expander(f"{num} vs {cat}"):
+            # --- Test selection avec session_state
             key_test = f"{num}_{cat}"
             if key_test not in st.session_state:
                 st.session_state[key_test] = test_options[0]
             test_name = st.selectbox("Choisir le test :", test_options, key=key_test)
-
+            
+            # --- Apparié pour t-test / Mann-Whitney
             apparie = False
             if test_name in ["t-test","Mann-Whitney"]:
                 key_apparie = f"apparie_{num}_{cat}"
                 if key_apparie not in st.session_state:
                     st.session_state[key_apparie] = False
-                apparie = st.radio("Données appariées ?", [False, True], index=int(st.session_state[key_apparie]), key=key_apparie)
+                st.session_state[key_apparie] = st.radio(
+                    "Données appariées ?", [False, True],
+                    index=int(st.session_state[key_apparie]),
+                    key=key_apparie
+                )
+                apparie = st.session_state[key_apparie]
 
+            # --- PubMed ---
             liens = rechercher_pubmed_test(test_name, mots_cles)
             if liens:
                 st.markdown("**Articles PubMed suggérés :**")
                 for lien in liens:
                     st.markdown(f"- [{lien}]({lien})")
 
+            # --- Exécution du test uniquement sur clic
             key_exec = f"exec_{num}_{cat}"
             if st.button(f"Exécuter le test {test_name}", key=key_exec):
                 groupes = df.groupby(cat)[num].apply(list)
@@ -144,7 +153,12 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     # --- 4️⃣ Régression linéaire multiple ---
     st.subheader("4️⃣ Régression linéaire multiple")
     if len(num_vars) > 1:
-        if st.checkbox("Exécuter régression linéaire multiple"):
+        for cat in num_vars:  # pour activer checkbox avec session_state
+            key_linreg = f"linreg_{cat}"
+            if key_linreg not in st.session_state:
+                st.session_state[key_linreg] = False
+            st.session_state[key_linreg] = st.checkbox("Exécuter régression linéaire multiple", key=key_linreg)
+        if any(st.session_state[f"linreg_{cat}"] for cat in num_vars):
             X = df[num_vars].dropna()
             cible = st.selectbox("Variable dépendante :", num_vars)
             y = X[cible]
@@ -179,82 +193,92 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
 
     # --- 5️⃣ PCA ---
     st.subheader("5️⃣ Analyse en Composantes Principales (PCA)")
-    if len(num_vars) > 1:
-        if st.checkbox("Exécuter PCA"):
-            X_scaled = StandardScaler().fit_transform(df[num_vars].dropna())
-            pca = PCA()
-            components = pca.fit_transform(X_scaled)
-            explained_variance = pca.explained_variance_ratio_
-            cum_var = explained_variance.cumsum()
-            n_comp = (cum_var<0.8).sum()+1
-            st.write(f"{n_comp} composantes expliquent ~80% de la variance")
-            loading_matrix = pd.DataFrame(pca.components_.T, index=num_vars,
-                                          columns=[f"PC{i+1}" for i in range(len(num_vars))])
-            st.write(loading_matrix.iloc[:,:n_comp])
+    key_pca = "execute_pca"
+    if key_pca not in st.session_state:
+        st.session_state[key_pca] = False
+    st.session_state[key_pca] = st.checkbox("Exécuter PCA", key=key_pca)
+    if st.session_state[key_pca] and len(num_vars) > 1:
+        X_scaled = StandardScaler().fit_transform(df[num_vars].dropna())
+        pca = PCA()
+        components = pca.fit_transform(X_scaled)
+        explained_variance = pca.explained_variance_ratio_
+        cum_var = explained_variance.cumsum()
+        n_comp = (cum_var<0.8).sum()+1
+        st.write(f"{n_comp} composantes expliquent ~80% de la variance")
+        loading_matrix = pd.DataFrame(pca.components_.T, index=num_vars,
+                                      columns=[f"PC{i+1}" for i in range(len(num_vars))])
+        st.write(loading_matrix.iloc[:,:n_comp])
 
-            fig, ax = plt.subplots()
-            ax.scatter(components[:,0], components[:,1])
-            ax.set_xlabel("PC1")
-            ax.set_ylabel("PC2")
-            ax.set_title("Projection individus PC1 vs PC2")
-            st.pyplot(fig)
+        fig, ax = plt.subplots()
+        ax.scatter(components[:,0], components[:,1])
+        ax.set_xlabel("PC1")
+        ax.set_ylabel("PC2")
+        ax.set_title("Projection individus PC1 vs PC2")
+        st.pyplot(fig)
 
     # --- 6️⃣ MCA ---
     st.subheader("6️⃣ Analyse des Correspondances Multiples (MCA)")
-    if len(cat_vars) > 1:
-        if st.checkbox("Exécuter MCA"):
-            try:
-                import prince
-                df_cat = df[cat_vars].fillna("Missing")
-                mca = prince.MCA(n_components=2, random_state=42)
-                mca = mca.fit(df_cat)
+    key_mca = "execute_mca"
+    if key_mca not in st.session_state:
+        st.session_state[key_mca] = False
+    st.session_state[key_mca] = st.checkbox("Exécuter MCA", key=key_mca)
+    if st.session_state[key_mca] and len(cat_vars) > 1:
+        try:
+            import prince
+            df_cat = df[cat_vars].fillna("Missing")
+            mca = prince.MCA(n_components=2, random_state=42)
+            mca = mca.fit(df_cat)
 
-                var_expl = mca.explained_inertia_ if hasattr(mca,"explained_inertia_") else mca.explained_variance_ratio_
-                st.write(f"Variance expliquée : {var_expl[0]*100:.2f}%, {var_expl[1]*100:.2f}%")
-                coords = mca.column_coordinates(df_cat)
-                ind_coords = mca.row_coordinates(df_cat)
+            var_expl = mca.explained_inertia_ if hasattr(mca,"explained_inertia_") else mca.explained_variance_ratio_
+            st.write(f"Variance expliquée : {var_expl[0]*100:.2f}%, {var_expl[1]*100:.2f}%")
+            coords = mca.column_coordinates(df_cat)
+            ind_coords = mca.row_coordinates(df_cat)
 
-                # Projection individus
-                fig, ax = plt.subplots()
-                ax.scatter(ind_coords[0], ind_coords[1], alpha=0.6)
-                ax.set_xlabel("Dim 1")
-                ax.set_ylabel("Dim 2")
-                ax.set_title("Projection individus MCA")
-                st.pyplot(fig)
+            # Projection individus
+            fig, ax = plt.subplots()
+            ax.scatter(ind_coords[0], ind_coords[1], alpha=0.6)
+            ax.set_xlabel("Dim 1")
+            ax.set_ylabel("Dim 2")
+            ax.set_title("Projection individus MCA")
+            st.pyplot(fig)
 
-                # Projection catégories
-                fig, ax = plt.subplots()
-                ax.scatter(coords[0], coords[1], color='red', alpha=0.7)
-                for i, label in enumerate(coords.index):
-                    ax.text(coords.iloc[i,0], coords.iloc[i,1], label, fontsize=9, color='darkred')
-                ax.set_xlabel("Dim 1")
-                ax.set_ylabel("Dim 2")
-                ax.set_title("Projection catégories MCA")
-                st.pyplot(fig)
+            # Projection catégories
+            fig, ax = plt.subplots()
+            ax.scatter(coords[0], coords[1], color='red', alpha=0.7)
+            for i, label in enumerate(coords.index):
+                ax.text(coords.iloc[i,0], coords.iloc[i,1], label, fontsize=9, color='darkred')
+            ax.set_xlabel("Dim 1")
+            ax.set_ylabel("Dim 2")
+            ax.set_title("Projection catégories MCA")
+            st.pyplot(fig)
 
-                # Cercle des corrélations
-                fig, ax = plt.subplots(figsize=(6,6))
-                circle = plt.Circle((0,0),1, color='gray', fill=False)
-                ax.add_artist(circle)
-                for i, label in enumerate(coords.index):
-                    ax.arrow(0,0, coords.iloc[i,0], coords.iloc[i,1], color='blue', alpha=0.5, head_width=0.03)
-                    ax.text(coords.iloc[i,0]*1.1, coords.iloc[i,1]*1.1, label, color='blue', ha='center', va='center', fontsize=8)
-                ax.set_xlim(-1.1,1.1)
-                ax.set_ylim(-1.1,1.1)
-                ax.axhline(0,color='gray',lw=0.5)
-                ax.axvline(0,color='gray',lw=0.5)
-                ax.set_title("Cercle des corrélations (MCA)")
-                st.pyplot(fig)
-            except ImportError:
-                st.warning("⚠️ Module 'prince' non installé. Exécutez : pip install prince")
-            except Exception as e:
-                st.error(f"Erreur MCA : {e}")
+            # Cercle des corrélations
+            fig, ax = plt.subplots(figsize=(6,6))
+            circle = plt.Circle((0,0),1, color='gray', fill=False)
+            ax.add_artist(circle)
+            for i, label in enumerate(coords.index):
+                ax.arrow(0,0, coords.iloc[i,0], coords.iloc[i,1], color='blue', alpha=0.5, head_width=0.03)
+                ax.text(coords.iloc[i,0]*1.1, coords.iloc[i,1]*1.1, label, color='blue', ha='center', va='center', fontsize=8)
+            ax.set_xlim(-1.1,1.1)
+            ax.set_ylim(-1.1,1.1)
+            ax.axhline(0,color='gray',lw=0.5)
+            ax.axvline(0,color='gray',lw=0.5)
+            ax.set_title("Cercle des corrélations (MCA)")
+            st.pyplot(fig)
+        except ImportError:
+            st.warning("⚠️ Module 'prince' non installé. Exécutez : pip install prince")
+        except Exception as e:
+            st.error(f"Erreur MCA : {e}")
 
     # --- 7️⃣ Régression logistique ---
     st.subheader("7️⃣ Régression logistique pour variables binaires")
     for cat in cat_vars:
         if df[cat].dropna().nunique()==2:
-            if st.checkbox(f"Exécuter régression logistique : {cat}"):
+            key_log = f"logreg_{cat}"
+            if key_log not in st.session_state:
+                st.session_state[key_log] = False
+            st.session_state[key_log] = st.checkbox(f"Exécuter régression logistique : {cat}", key=key_log)
+            if st.session_state[key_log]:
                 X = df[num_vars].dropna()
                 y = df[cat].loc[X.index]
                 model = LogisticRegression(max_iter=1000)
