@@ -7,23 +7,21 @@ def detect_variable_types(file_path: str, sheet_name=None):
     Types possibles : numérique, catégorielle, binaire.
     Gère les fichiers Excel à feuille unique ou multiple.
     Les valeurs manquantes sont ignorées dans l’analyse.
-    
+
     Args:
         file_path (str): chemin vers le fichier CSV ou Excel
         sheet_name (str/int, optional): nom ou index de la feuille (Excel). 
                                         Si None, toutes les feuilles sont traitées.
-    
+
     Returns:
-        dict: clé = nom de la feuille (ou 'data'), valeur = DataFrame des types détectés
-        dict: clé = nom de la feuille, valeur = DataFrame correspondant
+        types_results (dict): clé = nom de la feuille, valeur = DataFrame des types détectés
+        cleaned_data (dict): clé = nom de la feuille, valeur = DataFrame correspondant
     """
-    
     # --- 1️⃣ Lecture du fichier ---
     if file_path.endswith(('.xls', '.xlsx')):
-        if sheet_name is None:
-            all_sheets = pd.read_excel(file_path, sheet_name=None)
-        else:
-            all_sheets = {sheet_name: pd.read_excel(file_path, sheet_name=sheet_name)}
+        all_sheets = pd.read_excel(file_path, sheet_name=sheet_name)
+        if sheet_name is not None:
+            all_sheets = {sheet_name: all_sheets}  # uniformisation dict
     elif file_path.endswith('.csv'):
         all_sheets = {'data': pd.read_csv(file_path, sep=None, engine='python')}
     else:
@@ -42,7 +40,7 @@ def detect_variable_types(file_path: str, sheet_name=None):
             if col_data.empty:
                 continue
 
-            # Normalisation pour l'analyse des valeurs uniques
+            # Normalisation pour analyse des valeurs uniques
             unique_vals = pd.Series(col_data).astype(str).str.strip().unique()
             n_unique = len(unique_vals)
 
@@ -58,7 +56,7 @@ def detect_variable_types(file_path: str, sheet_name=None):
                 "variable": col,
                 "type": var_type,
                 "valeurs_uniques": n_unique,
-                "exemples": unique_vals[:5]
+                "exemples": list(unique_vals[:5])
             })
 
         types_results[sheet] = pd.DataFrame(results)
