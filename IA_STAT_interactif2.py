@@ -21,7 +21,7 @@ def rechercher_pubmed_test(test_name, mots_cles, email="votre.email@example.com"
     liens = [f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" for pmid in pmids]
     return liens
 
-# --- Fonction interactive complète (stable) ---
+# --- Fonction interactive complète ---
 def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     num_vars = types_df[types_df['type']=="numérique"]['variable'].tolist()
     cat_vars = types_df[types_df['type'].isin(['catégorielle','binaire'])]['variable'].tolist()
@@ -42,32 +42,22 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
             test_options = ["unknown"]
 
         with st.expander(f"{num} vs {cat}"):
-            # --- Test selection avec session_state
             key_test = f"{num}_{cat}"
-            if key_test not in st.session_state:
-                st.session_state[key_test] = test_options[0]
-            test_name = st.selectbox("Choisir le test :", test_options, key=key_test)
-            
-            # --- Apparié pour t-test / Mann-Whitney
+            test_name = st.selectbox("Choisir le test :", test_options, index=0, key=key_test)
+
             apparie = False
             if test_name in ["t-test","Mann-Whitney"]:
                 key_apparie = f"apparie_{num}_{cat}"
-                if key_apparie not in st.session_state:
-                    st.session_state[key_apparie] = False
-                apparie = st.radio(
-                    "Données appariées ?", [False, True],
-                    index=int(st.session_state[key_apparie]),
-                    key=key_apparie
-                )
+                apparie = st.radio("Données appariées ?", [False, True], key=key_apparie)
 
-            # --- PubMed ---
+            # PubMed
             liens = rechercher_pubmed_test(test_name, mots_cles)
             if liens:
                 st.markdown("**Articles PubMed suggérés :**")
                 for lien in liens:
                     st.markdown(f"- [{lien}]({lien})")
 
-            # --- Exécution du test uniquement sur clic ---
+            # Exécution test
             key_exec = f"exec_{num}_{cat}"
             if st.button(f"Exécuter le test {test_name}", key=key_exec):
                 groupes = df.groupby(cat)[num].apply(list)
@@ -94,7 +84,7 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                 except Exception as e:
                     st.error(f"Erreur : {e}")
 
-    # --- 2️⃣ Deux variables numériques ---
+    # --- 2️⃣ Corrélations numériques ---
     st.subheader("2️⃣ Corrélations numériques")
     for var1, var2 in itertools.combinations(num_vars, 2):
         verdict1 = distribution_df.loc[distribution_df['variable']==var1, 'verdict'].values[0]
@@ -119,7 +109,7 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                 ax.set_title(f"Corrélation ({test_type}) : {var1} vs {var2}")
                 st.pyplot(fig)
 
-    # --- 3️⃣ Deux variables catégorielles ---
+    # --- 3️⃣ Variables catégorielles ---
     st.subheader("3️⃣ Variables catégorielles")
     for var1, var2 in itertools.combinations(cat_vars, 2):
         with st.expander(f"{var1} vs {var2}"):
@@ -231,7 +221,6 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
             coords = mca.column_coordinates(df_cat)
             ind_coords = mca.row_coordinates(df_cat)
 
-            # Projection individus
             fig, ax = plt.subplots()
             ax.scatter(ind_coords[0], ind_coords[1], alpha=0.6)
             ax.set_xlabel("Dim 1")
@@ -239,7 +228,6 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
             ax.set_title("Projection individus MCA")
             st.pyplot(fig)
 
-            # Projection catégories
             fig, ax = plt.subplots()
             ax.scatter(coords[0], coords[1], color='red', alpha=0.7)
             for i, label in enumerate(coords.index):
@@ -249,7 +237,6 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
             ax.set_title("Projection catégories MCA")
             st.pyplot(fig)
 
-            # Cercle des corrélations
             fig, ax = plt.subplots(figsize=(6,6))
             circle = plt.Circle((0,0),1, color='gray', fill=False)
             ax.add_artist(circle)
@@ -272,8 +259,6 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     for cat in cat_vars:
         if df[cat].dropna().nunique()==2:
             key_log = f"logreg_{cat}"
-            if key_log not in st.session_state:
-                st.session_state[key_log] = False
             st.session_state[key_log] = st.checkbox(f"Exécuter régression logistique : {cat}", key=key_log)
             if st.session_state[key_log]:
                 X = df[num_vars].dropna()
