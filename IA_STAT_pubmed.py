@@ -1,35 +1,41 @@
+import streamlit as st
 import re
 from Bio import Entrez
 
 # --- Config PubMed ---
 Entrez.email = "ton.email@example.com"
 
+st.title("🔍 Recherche PubMed depuis une description d'étude")
+
 # --- Entrée utilisateur ---
-description = input("Décrivez votre étude en quelques phrases : ")
+description = st.text_area("Décrivez votre étude en quelques phrases :")
 
-# --- Extraction de mots alphabétiques (évite NLTK) ---
-tokens = re.findall(r'\b\w+\b', description.lower())
-stopwords_fr = set([
-    "le","la","les","un","une","des","de","du","et","en","au","aux","avec",
-    "pour","sur","dans","par","au","a","ce","ces","est","sont","ou","où","se",
-    "sa","son","que","qui","ne","pas","plus","moins","comme","donc"
-])
-keywords_fr = [w for w in tokens if w not in stopwords_fr]
+if description:
+    # --- Extraction des mots alphabétiques ---
+    tokens = re.findall(r'\b\w+\b', description.lower())
+    stopwords_fr = set([
+        "le","la","les","un","une","des","de","du","et","en","au","aux","avec",
+        "pour","sur","dans","par","au","a","ce","ces","est","sont","ou","où","se",
+        "sa","son","que","qui","ne","pas","plus","moins","comme","donc"
+    ])
+    keywords_fr = [w for w in tokens if w not in stopwords_fr]
 
-query = " OR ".join(keywords_fr)
+    if keywords_fr:
+        query = " OR ".join(keywords_fr)
+        st.markdown(f"**Mots-clés français extraits :** {', '.join(keywords_fr)}")
+        st.markdown(f"**Requête PubMed générée :** {query}")
 
-print(f"\nMots-clés français : {keywords_fr}")
-print(f"Requête PubMed : {query}")
+        # --- Recherche PubMed ---
+        handle = Entrez.esearch(db="pubmed", term=query, retmax=10, sort="relevance")
+        record = Entrez.read(handle)
+        handle.close()
 
-# --- Recherche PubMed (max 10 résultats) ---
-handle = Entrez.esearch(db="pubmed", term=query, retmax=10, sort="relevance")
-record = Entrez.read(handle)
-handle.close()
-
-pmids = record['IdList']
-if not pmids:
-    print("\nAucun article trouvé.")
-else:
-    print("\n=== Articles PubMed trouvés ===")
-    for i, pmid in enumerate(pmids, 1):
-        print(f"{i}. https://pubmed.ncbi.nlm.nih.gov/{pmid}/")
+        pmids = record['IdList']
+        if not pmids:
+            st.warning("⚠️ Aucun article trouvé.")
+        else:
+            st.success(f"✅ {len(pmids)} articles trouvés :")
+            for i, pmid in enumerate(pmids, 1):
+                st.markdown(f"{i}. [https://pubmed.ncbi.nlm.nih.gov/{pmid}/](https://pubmed.ncbi.nlm.nih.gov/{pmid}/)")
+    else:
+        st.warning("⚠️ Aucun mot-clé extrait de la description.")
