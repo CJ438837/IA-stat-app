@@ -57,3 +57,48 @@ if uploaded_file is not None:
         st.success("✅ Analyse terminée. Passez à la page « Choix du test ».")
 else:
     st.info("💡 Importez un fichier Excel pour commencer.")
+
+
+import streamlit as st
+
+# --- Gestion de la navigation ---
+if "page" not in st.session_state:
+    st.session_state.page = "Accueil"
+
+def go_to(page_name):
+    st.session_state.page = page_name
+    st.rerun()
+
+# --- Barre latérale simple ---
+st.sidebar.title("Navigation")
+if st.sidebar.button("Accueil"):
+    go_to("Accueil")
+if st.sidebar.button("Analyse descriptive"):
+    go_to("Analyse descriptive")
+if st.sidebar.button("Tests statistiques"):
+    go_to("Tests statistiques")
+if st.sidebar.button("Résultats"):
+    go_to("Résultats")
+
+# --- Contenu selon la page ---
+if st.session_state.page == "Accueil":
+    st.title("🧠 Accueil")
+    st.write("Bienvenue dans ton assistant IA-Stat.")
+    if st.button("Commencer l'analyse"):
+        go_to("Analyse descriptive")
+
+elif st.session_state.page == "Analyse descriptive":
+    st.title("📊 Analyse descriptive")
+    st.write("Page pour les analyses descriptives.")
+    if st.button("Passer aux tests statistiques"):
+        go_to("Tests statistiques")
+
+elif st.session_state.page == "Tests statistiques":
+    st.title("🧮 Tests statistiques")
+    st.write("Sélectionne les tests à exécuter.")
+    if st.button("Voir les résultats"):
+        go_to("Résultats")
+
+elif st.session_state.page == "Résultats":
+    st.title("📈 Résultats")
+    st.write("Les résultats de tes tests apparaîtront ici.")
