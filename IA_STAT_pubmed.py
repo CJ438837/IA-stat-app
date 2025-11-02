@@ -1,5 +1,6 @@
 import re
-from googletrans import Translator
+from deep_translator import GoogleTranslator
+keywords_en = [GoogleTranslator(source='fr', target='en').translate(word) for word in keywords_fr]
 from Bio import Entrez
 
 # --- Config PubMed ---
