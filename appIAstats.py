@@ -45,7 +45,6 @@ if uploaded_file is not None:
                 "taille": "size",
                 "genre": "gender",
                 "temps": "time"
-                # Ajoute ici tous les mots utiles pour ton projet
             }
             keywords_en = [translation_dict.get(w, w) for w in keywords_fr]
 
@@ -54,18 +53,43 @@ if uploaded_file is not None:
             st.write(f"**Anglais :** {keywords_en}")
 
             # --- Import des fonctions IA-Stat ---
-            from IA_STAT_typevariable_251125 import detect_variable_types
             from IA_STAT_descriptive_251125 import descriptive_analysis
             from IA_STAT_distribution_251125 import advanced_distribution_analysis
             from IA_STAT_interactif2 import propose_tests_interactif
 
-            # --- Détection des types ---
-            # Adaptation : passer le DataFrame directement
-            types_dict, data_dict_adapted = detect_variable_types(df_sheet)  # Il faut adapter la fonction pour accepter df
+            # --- Fonction adaptée pour DataFrame déjà chargé ---
+            import numpy as np
+            def detect_variable_types_df(df):
+                results = []
+                for col in df.columns:
+                    col_data = df[col].dropna()
+                    if col_data.empty:
+                        continue
 
-            # Récupération de la feuille
-            types_df = types_dict[sheet_name]
-            df_sheet = data_dict_adapted[sheet_name]
+                    unique_vals = pd.Series(col_data).astype(str).str.strip().unique()
+                    n_unique = len(unique_vals)
+
+                    if n_unique == 2:
+                        var_type = "binaire"
+                    elif np.issubdtype(col_data.dtype, np.number):
+                        var_type = "numérique"
+                    else:
+                        var_type = "catégorielle"
+
+                    results.append({
+                        "variable": col,
+                        "type": var_type,
+                        "valeurs_uniques": n_unique,
+                        "exemples": unique_vals[:5]
+                    })
+
+                types_df = pd.DataFrame(results)
+                return {"data": types_df}, {"data": df}
+
+            # --- Détection des types ---
+            types_dict, data_dict_adapted = detect_variable_types_df(df_sheet)
+            types_df = types_dict['data']
+            df_sheet = data_dict_adapted['data']
 
             # --- Analyse descriptive ---
             summary = descriptive_analysis(df_sheet, types_df)
