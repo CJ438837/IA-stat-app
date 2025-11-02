@@ -21,7 +21,7 @@ def rechercher_pubmed_test(test_name, mots_cles, email="votre.email@example.com"
     liens = [f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" for pmid in pmids]
     return liens
 
-# --- Fonction interactive complète (version stable) ---
+# --- Fonction interactive complète (stable) ---
 def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     num_vars = types_df[types_df['type']=="numérique"]['variable'].tolist()
     cat_vars = types_df[types_df['type'].isin(['catégorielle','binaire'])]['variable'].tolist()
@@ -54,12 +54,11 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                 key_apparie = f"apparie_{num}_{cat}"
                 if key_apparie not in st.session_state:
                     st.session_state[key_apparie] = False
-                st.session_state[key_apparie] = st.radio(
+                apparie = st.radio(
                     "Données appariées ?", [False, True],
                     index=int(st.session_state[key_apparie]),
                     key=key_apparie
                 )
-                apparie = st.session_state[key_apparie]
 
             # --- PubMed ---
             liens = rechercher_pubmed_test(test_name, mots_cles)
@@ -68,7 +67,7 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                 for lien in liens:
                     st.markdown(f"- [{lien}]({lien})")
 
-            # --- Exécution du test uniquement sur clic
+            # --- Exécution du test uniquement sur clic ---
             key_exec = f"exec_{num}_{cat}"
             if st.button(f"Exécuter le test {test_name}", key=key_exec):
                 groupes = df.groupby(cat)[num].apply(list)
@@ -152,44 +151,42 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
 
     # --- 4️⃣ Régression linéaire multiple ---
     st.subheader("4️⃣ Régression linéaire multiple")
-    if len(num_vars) > 1:
-        for cat in num_vars:  # pour activer checkbox avec session_state
-            key_linreg = f"linreg_{cat}"
-            if key_linreg not in st.session_state:
-                st.session_state[key_linreg] = False
-            st.session_state[key_linreg] = st.checkbox("Exécuter régression linéaire multiple", key=key_linreg)
-        if any(st.session_state[f"linreg_{cat}"] for cat in num_vars):
-            X = df[num_vars].dropna()
-            cible = st.selectbox("Variable dépendante :", num_vars)
-            y = X[cible]
-            X_pred = X.drop(columns=[cible])
-            model = LinearRegression()
-            model.fit(X_pred, y)
-            y_pred = model.predict(X_pred)
-            residus = y - y_pred
+    key_linreg = "execute_linreg"
+    if key_linreg not in st.session_state:
+        st.session_state[key_linreg] = False
+    st.session_state[key_linreg] = st.checkbox("Exécuter régression linéaire multiple", key=key_linreg)
+    if st.session_state[key_linreg] and len(num_vars) > 1:
+        X = df[num_vars].dropna()
+        cible = st.selectbox("Variable dépendante :", num_vars)
+        y = X[cible]
+        X_pred = X.drop(columns=[cible])
+        model = LinearRegression()
+        model.fit(X_pred, y)
+        y_pred = model.predict(X_pred)
+        residus = y - y_pred
 
-            st.write(f"R² = {model.score(X_pred, y):.4f}")
-            stat, p = stats.shapiro(residus)
-            st.write(f"Shapiro-Wilk résidus : stat={stat:.4f}, p={p:.4g}")
-            st.write("Résidus normalement distribués" if p>0.05 else "⚠️ Résidus non normaux")
+        st.write(f"R² = {model.score(X_pred, y):.4f}")
+        stat, p = stats.shapiro(residus)
+        st.write(f"Shapiro-Wilk résidus : stat={stat:.4f}, p={p:.4g}")
+        st.write("Résidus normalement distribués" if p>0.05 else "⚠️ Résidus non normaux")
 
-            coef_df = pd.DataFrame({"Variable": X_pred.columns, "Coefficient": model.coef_})
-            st.table(coef_df)
-            st.write(f"Intercept : {model.intercept_:.4f}")
+        coef_df = pd.DataFrame({"Variable": X_pred.columns, "Coefficient": model.coef_})
+        st.table(coef_df)
+        st.write(f"Intercept : {model.intercept_:.4f}")
 
-            fig, axes = plt.subplots(2,2, figsize=(12,10))
-            sns.scatterplot(x=y_pred, y=residus, ax=axes[0,0])
-            axes[0,0].axhline(0, color='red', linestyle='--')
-            axes[0,0].set_title("Résidus vs Prédit")
-            sns.histplot(residus, kde=True, ax=axes[0,1], color='skyblue')
-            axes[0,1].set_title("Distribution résidus")
-            stats.probplot(residus, dist="norm", plot=axes[1,0])
-            axes[1,0].set_title("QQ-Plot résidus")
-            sns.scatterplot(x=y, y=y_pred, ax=axes[1,1])
-            axes[1,1].plot([y.min(), y.max()], [y.min(), y.max()], color='red', linestyle='--')
-            axes[1,1].set_title("Observé vs Prédit")
-            plt.tight_layout()
-            st.pyplot(fig)
+        fig, axes = plt.subplots(2,2, figsize=(12,10))
+        sns.scatterplot(x=y_pred, y=residus, ax=axes[0,0])
+        axes[0,0].axhline(0, color='red', linestyle='--')
+        axes[0,0].set_title("Résidus vs Prédit")
+        sns.histplot(residus, kde=True, ax=axes[0,1], color='skyblue')
+        axes[0,1].set_title("Distribution résidus")
+        stats.probplot(residus, dist="norm", plot=axes[1,0])
+        axes[1,0].set_title("QQ-Plot résidus")
+        sns.scatterplot(x=y, y=y_pred, ax=axes[1,1])
+        axes[1,1].plot([y.min(), y.max()], [y.min(), y.max()], color='red', linestyle='--')
+        axes[1,1].set_title("Observé vs Prédit")
+        plt.tight_layout()
+        st.pyplot(fig)
 
     # --- 5️⃣ PCA ---
     st.subheader("5️⃣ Analyse en Composantes Principales (PCA)")
