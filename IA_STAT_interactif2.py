@@ -21,14 +21,16 @@ def rechercher_pubmed_test(test_name, mots_cles, email="votre.email@example.com"
     liens = [f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" for pmid in pmids]
     return liens
 
-# --- Fonction interactive complète avec forms ---
+# --- Fonction interactive complète version form ---
 def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     num_vars = types_df[types_df['type']=="numérique"]['variable'].tolist()
     cat_vars = types_df[types_df['type'].isin(['catégorielle','binaire'])]['variable'].tolist()
 
     st.header("🧮 Tests statistiques interactifs")
 
-    # --- 1️⃣ Numérique vs Catégoriel ---
+    # -------------------------------
+    # 1️⃣ Numérique vs Catégoriel
+    # -------------------------------
     st.subheader("1️⃣ Numérique vs Catégoriel")
     for num, cat in itertools.product(num_vars, cat_vars):
         n_modalites = df[cat].dropna().nunique()
@@ -42,13 +44,21 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
             test_options = ["unknown"]
 
         with st.expander(f"{num} vs {cat}"):
-            with st.form(f"form_numcat_{num}_{cat}"):
+            with st.form(key=f"form_{num}_{cat}"):
                 test_name = st.selectbox("Choisir le test :", test_options)
                 apparie = False
                 if test_name in ["t-test","Mann-Whitney"]:
                     apparie = st.radio("Données appariées ?", [False, True])
-                submit = st.form_submit_button("Exécuter le test")
-                if submit:
+
+                # PubMed
+                liens = rechercher_pubmed_test(test_name, mots_cles)
+                if liens:
+                    st.markdown("**Articles PubMed suggérés :**")
+                    for lien in liens:
+                        st.markdown(f"- [{lien}]({lien})")
+
+                submitted = st.form_submit_button(f"Exécuter le test {test_name}")
+                if submitted:
                     groupes = df.groupby(cat)[num].apply(list)
                     try:
                         if test_name == "t-test":
@@ -73,7 +83,9 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                     except Exception as e:
                         st.error(f"Erreur : {e}")
 
-    # --- 2️⃣ Deux variables numériques ---
+    # -------------------------------
+    # 2️⃣ Corrélations numériques
+    # -------------------------------
     st.subheader("2️⃣ Corrélations numériques")
     for var1, var2 in itertools.combinations(num_vars, 2):
         verdict1 = distribution_df.loc[distribution_df['variable']==var1, 'verdict'].values[0]
@@ -81,9 +93,15 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
         test_type = "Pearson" if verdict1=="Normal" and verdict2=="Normal" else "Spearman"
 
         with st.expander(f"Corrélation : {var1} vs {var2}"):
-            with st.form(f"form_corr_{var1}_{var2}"):
-                submit = st.form_submit_button(f"Exécuter la corrélation {var1} vs {var2}")
-                if submit:
+            liens = rechercher_pubmed_test(f"{test_type} correlation", mots_cles)
+            if liens:
+                st.markdown("**Articles PubMed :**")
+                for lien in liens:
+                    st.markdown(f"- [{lien}]({lien})")
+
+            with st.form(key=f"form_corr_{var1}_{var2}"):
+                submitted = st.form_submit_button(f"Exécuter la corrélation {var1} vs {var2}")
+                if submitted:
                     corr, p = stats.pearsonr(df[var1].dropna(), df[var2].dropna()) if test_type=="Pearson" else stats.spearmanr(df[var1].dropna(), df[var2].dropna())
                     st.write(f"Corrélation = {corr:.4f}, p-value = {p:.4g}")
                     st.write("→ Corrélation significative" if p<0.05 else "→ Pas de corrélation significative")
@@ -93,13 +111,21 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                     ax.set_title(f"Corrélation ({test_type}) : {var1} vs {var2}")
                     st.pyplot(fig)
 
-    # --- 3️⃣ Deux variables catégorielles ---
+    # -------------------------------
+    # 3️⃣ Variables catégorielles
+    # -------------------------------
     st.subheader("3️⃣ Variables catégorielles")
     for var1, var2 in itertools.combinations(cat_vars, 2):
         with st.expander(f"{var1} vs {var2}"):
-            with st.form(f"form_cat_{var1}_{var2}"):
-                submit = st.form_submit_button(f"Exécuter test catégoriel {var1} vs {var2}")
-                if submit:
+            liens = rechercher_pubmed_test("Chi-square test", mots_cles)
+            if liens:
+                st.markdown("**Articles PubMed :**")
+                for lien in liens:
+                    st.markdown(f"- [{lien}]({lien})")
+
+            with st.form(key=f"form_cat_{var1}_{var2}"):
+                submitted = st.form_submit_button(f"Exécuter test catégoriel {var1} vs {var2}")
+                if submitted:
                     contingency_table = pd.crosstab(df[var1], df[var2])
                     try:
                         if contingency_table.size <= 4:
@@ -118,13 +144,18 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                     except Exception as e:
                         st.error(f"Erreur : {e}")
 
-    # --- 4️⃣ Régression linéaire multiple ---
+    # -------------------------------
+    # 4️⃣ Régression linéaire multiple
+    # -------------------------------
     st.subheader("4️⃣ Régression linéaire multiple")
     if len(num_vars) > 1:
-        with st.form("form_linreg"):
-            cible = st.selectbox("Variable dépendante :", num_vars)
-            submit = st.form_submit_button("Exécuter régression linéaire multiple")
-            if submit:
+        with st.form(key="form_linreg"):
+            execute_linreg = st.checkbox("Exécuter régression linéaire multiple")
+            cible = None
+            if execute_linreg:
+                cible = st.selectbox("Variable dépendante :", num_vars)
+            submitted = st.form_submit_button("Calculer régression")
+            if submitted and execute_linreg and cible:
                 X = df[num_vars].dropna()
                 y = X[cible]
                 X_pred = X.drop(columns=[cible])
@@ -156,12 +187,15 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                 plt.tight_layout()
                 st.pyplot(fig)
 
-    # --- 5️⃣ PCA ---
+    # -------------------------------
+    # 5️⃣ PCA
+    # -------------------------------
     st.subheader("5️⃣ Analyse en Composantes Principales (PCA)")
     if len(num_vars) > 1:
-        with st.form("form_pca"):
-            submit = st.form_submit_button("Exécuter PCA")
-            if submit:
+        with st.form(key="form_pca"):
+            execute_pca = st.checkbox("Exécuter PCA")
+            submitted = st.form_submit_button("Calculer PCA")
+            if submitted and execute_pca:
                 X_scaled = StandardScaler().fit_transform(df[num_vars].dropna())
                 pca = PCA()
                 components = pca.fit_transform(X_scaled)
@@ -180,12 +214,15 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                 ax.set_title("Projection individus PC1 vs PC2")
                 st.pyplot(fig)
 
-    # --- 6️⃣ MCA ---
+    # -------------------------------
+    # 6️⃣ MCA
+    # -------------------------------
     st.subheader("6️⃣ Analyse des Correspondances Multiples (MCA)")
     if len(cat_vars) > 1:
-        with st.form("form_mca"):
-            submit = st.form_submit_button("Exécuter MCA")
-            if submit:
+        with st.form(key="form_mca"):
+            execute_mca = st.checkbox("Exécuter MCA")
+            submitted = st.form_submit_button("Calculer MCA")
+            if submitted and execute_mca:
                 try:
                     import prince
                     df_cat = df[cat_vars].fillna("Missing")
@@ -233,13 +270,16 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                 except Exception as e:
                     st.error(f"Erreur MCA : {e}")
 
-    # --- 7️⃣ Régression logistique ---
+    # -------------------------------
+    # 7️⃣ Régression logistique
+    # -------------------------------
     st.subheader("7️⃣ Régression logistique pour variables binaires")
     for cat in cat_vars:
         if df[cat].dropna().nunique()==2:
-            with st.form(f"form_logreg_{cat}"):
-                submit = st.form_submit_button(f"Exécuter régression logistique : {cat}")
-                if submit:
+            with st.form(key=f"form_log_{cat}"):
+                execute_log = st.checkbox(f"Exécuter régression logistique : {cat}")
+                submitted = st.form_submit_button(f"Calculer régression logistique {cat}")
+                if submitted and execute_log:
                     X = df[num_vars].dropna()
                     y = df[cat].loc[X.index]
                     model = LogisticRegression(max_iter=1000)
