@@ -5,11 +5,12 @@ from scipy.stats import skew, kurtosis
 def descriptive_analysis(df, types_df):
     """
     Réalise une analyse descriptive automatique selon le type de variable.
-    
+
     Args:
-        df (DataFrame) : données nettoyées
-        types_df (DataFrame) : résultat de detect_variable_types pour cette feuille
-    
+        df (pd.DataFrame) : données nettoyées
+        types_df (pd.DataFrame) : résultat de detect_variable_types pour cette feuille,
+                                  doit contenir les colonnes ['variable', 'type']
+
     Returns:
         dict : clé = variable, valeur = dictionnaire des statistiques descriptives
     """
@@ -18,8 +19,11 @@ def descriptive_analysis(df, types_df):
     for _, row in types_df.iterrows():
         col = row['variable']
         var_type = row['type']
-        col_data = df[col].dropna()  # on ignore les NaN
 
+        if col not in df.columns:
+            continue  # Ignore les variables manquantes dans le DataFrame
+
+        col_data = df[col].dropna()  # Ignore les NaN
         if col_data.empty:
             continue
 
@@ -41,7 +45,6 @@ def descriptive_analysis(df, types_df):
         elif var_type in ["catégorielle", "binaire"]:
             value_counts = col_data.value_counts()
             freqs = (value_counts / col_data.count()).to_dict()
-            # Détection des modalités rares (<5% des valeurs)
             rare_categories = [k for k, v in freqs.items() if v < 0.05]
 
             desc = {
