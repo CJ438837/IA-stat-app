@@ -1,6 +1,6 @@
 streamlit
 pandas
-googletrans==4.0.0-rc1 --force-reinstall
+googletrans
 biopython
 stripe
 openpyxl
