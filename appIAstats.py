@@ -34,7 +34,6 @@ if uploaded_file is not None:
 
             st.markdown("### 🧩 Mots-clés extraits")
             st.write(f"**Français :** {keywords_fr}")
-            st.write(f"**Anglais :** {keywords_en}")
 
             # --- Analyse automatisée ---
             from IA_STAT_typevariable_251125 import detect_variable_types
