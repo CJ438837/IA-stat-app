@@ -5,4 +5,5 @@ openpyxl
 scipy
 matplotlib
 seaborn
+fitter
 stripe
