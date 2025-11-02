@@ -3,7 +3,7 @@ import pandas as pd
 import re
 import numpy as np
 
-from IA_STAT_typevariable_251125 import detect_variable_types
+from IA_STAT_typevariable_251125 import detect_variable_types_df
 from IA_STAT_descriptive_251125 import descriptive_analysis
 from IA_STAT_distribution_251125 import advanced_distribution_analysis
 
