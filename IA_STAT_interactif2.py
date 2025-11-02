@@ -21,7 +21,7 @@ def rechercher_pubmed_test(test_name, mots_cles, email="votre.email@example.com"
     liens = [f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" for pmid in pmids]
     return liens
 
-# --- Fonction interactive Streamlit complète ---
+# --- Fonction interactive complète ---
 def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     num_vars = types_df[types_df['type']=="numérique"]['variable'].tolist()
     cat_vars = types_df[types_df['type'].isin(['catégorielle','binaire'])]['variable'].tolist()
@@ -42,18 +42,34 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
             test_options = ["unknown"]
 
         with st.expander(f"{num} vs {cat}"):
-            test_name = st.selectbox("Choisir le test :", test_options, key=f"{num}_{cat}")
-            apparie = False
-            if test_name in ["t-test","Mann-Whitney"]:
-                apparie = st.radio("Données appariées ?", [False, True], index=0, key=f"apparie_{num}_{cat}")
+            key_test = f"{num}_{cat}_test"
+            if key_test not in st.session_state:
+                st.session_state[key_test] = test_options[0]
+            test_name = st.selectbox("Choisir le test :", test_options, index=test_options.index(st.session_state[key_test]), key=key_test)
+            st.session_state[key_test] = test_name
 
+            # Appariement
+            apparie = False
+            key_app = f"{num}_{cat}_apparie"
+            if test_name in ["t-test","Mann-Whitney"]:
+                if key_app not in st.session_state:
+                    st.session_state[key_app] = False
+                apparie = st.radio("Données appariées ?", [False, True], index=int(st.session_state[key_app]), key=key_app)
+                st.session_state[key_app] = apparie
+
+            # PubMed
             liens = rechercher_pubmed_test(test_name, mots_cles)
             if liens:
                 st.markdown("**Articles PubMed suggérés :**")
                 for lien in liens:
                     st.markdown(f"- [{lien}]({lien})")
 
-            if st.button(f"Exécuter le test {test_name}", key=f"exec_{num}_{cat}"):
+            # Exécution test
+            key_exec = f"{num}_{cat}_exec"
+            if key_exec not in st.session_state:
+                st.session_state[key_exec] = None
+
+            if st.button(f"Exécuter le test {test_name}", key=f"btn_{key_exec}"):
                 groupes = df.groupby(cat)[num].apply(list)
                 try:
                     if test_name == "t-test":
@@ -66,19 +82,23 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                         stat, p = stats.kruskal(*groupes)
                     else:
                         stat, p = None, None
-
-                    if stat is not None:
-                        st.write(f"Statistique = {stat:.4f}, p-value = {p:.4g}")
-                        st.write("→ Impact significatif" if p<0.05 else "→ Pas d'impact significatif")
-
-                    fig, ax = plt.subplots()
-                    sns.boxplot(x=cat, y=num, data=df, ax=ax)
-                    ax.set_title(f"{test_name} : {num} vs {cat}")
-                    st.pyplot(fig)
+                    st.session_state[key_exec] = (stat, p)
                 except Exception as e:
                     st.error(f"Erreur : {e}")
+                    st.session_state[key_exec] = None
 
-    # --- 2️⃣ Deux variables numériques (corrélation) ---
+            # Affichage résultats si déjà calculés
+            if st.session_state[key_exec] is not None:
+                stat, p = st.session_state[key_exec]
+                st.write(f"Statistique = {stat:.4f}, p-value = {p:.4g}")
+                st.write("→ Impact significatif" if p<0.05 else "→ Pas d'impact significatif")
+
+                fig, ax = plt.subplots()
+                sns.boxplot(x=cat, y=num, data=df, ax=ax)
+                ax.set_title(f"{test_name} : {num} vs {cat}")
+                st.pyplot(fig)
+
+    # --- 2️⃣ Corrélations numériques ---
     st.subheader("2️⃣ Corrélations numériques")
     for var1, var2 in itertools.combinations(num_vars, 2):
         verdict1 = distribution_df.loc[distribution_df['variable']==var1, 'verdict'].values[0]
@@ -86,14 +106,16 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
         test_type = "Pearson" if verdict1=="Normal" and verdict2=="Normal" else "Spearman"
 
         with st.expander(f"Corrélation : {var1} vs {var2}"):
-            liens = rechercher_pubmed_test(f"{test_type} correlation", mots_cles)
-            if liens:
-                st.markdown("**Articles PubMed :**")
-                for lien in liens:
-                    st.markdown(f"- [{lien}]({lien})")
+            key_corr = f"corr_{var1}_{var2}"
+            if key_corr not in st.session_state:
+                st.session_state[key_corr] = None
 
-            if st.button(f"Exécuter la corrélation {var1} vs {var2}", key=f"corr_{var1}_{var2}"):
+            if st.button(f"Exécuter la corrélation {var1} vs {var2}", key=f"btn_{key_corr}"):
                 corr, p = stats.pearsonr(df[var1].dropna(), df[var2].dropna()) if test_type=="Pearson" else stats.spearmanr(df[var1].dropna(), df[var2].dropna())
+                st.session_state[key_corr] = (corr, p)
+
+            if st.session_state[key_corr] is not None:
+                corr, p = st.session_state[key_corr]
                 st.write(f"Corrélation = {corr:.4f}, p-value = {p:.4g}")
                 st.write("→ Corrélation significative" if p<0.05 else "→ Pas de corrélation significative")
 
@@ -102,16 +124,21 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                 ax.set_title(f"Corrélation ({test_type}) : {var1} vs {var2}")
                 st.pyplot(fig)
 
-    # --- 3️⃣ Deux variables catégorielles ---
+    # --- 3️⃣ Variables catégorielles ---
     st.subheader("3️⃣ Variables catégorielles")
     for var1, var2 in itertools.combinations(cat_vars, 2):
         with st.expander(f"{var1} vs {var2}"):
+            key_cat = f"cat_{var1}_{var2}"
+            if key_cat not in st.session_state:
+                st.session_state[key_cat] = None
+
             liens = rechercher_pubmed_test("Chi-square test", mots_cles)
             if liens:
                 st.markdown("**Articles PubMed :**")
                 for lien in liens:
                     st.markdown(f"- [{lien}]({lien})")
-            if st.button(f"Exécuter test catégoriel {var1} vs {var2}", key=f"cat_{var1}_{var2}"):
+
+            if st.button(f"Exécuter test catégoriel {var1} vs {var2}", key=f"btn_{key_cat}"):
                 contingency_table = pd.crosstab(df[var1], df[var2])
                 try:
                     if contingency_table.size <= 4:
@@ -120,20 +147,30 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
                     else:
                         stat, p, dof, expected = stats.chi2_contingency(contingency_table)
                         test_name = "Chi²"
-                    st.write(f"{test_name} : statistique={stat:.4f}, p-value={p:.4g}")
-                    st.write("→ Dépendance significative" if p<0.05 else "→ Pas de dépendance significative")
-
-                    fig, ax = plt.subplots()
-                    sns.heatmap(contingency_table, annot=True, fmt="d", cmap="coolwarm", ax=ax)
-                    ax.set_title(f"{test_name} : {var1} vs {var2}")
-                    st.pyplot(fig)
+                    st.session_state[key_cat] = (stat, p, test_name)
                 except Exception as e:
                     st.error(f"Erreur : {e}")
+                    st.session_state[key_cat] = None
+
+            if st.session_state[key_cat] is not None:
+                stat, p, test_name = st.session_state[key_cat]
+                st.write(f"{test_name} : statistique={stat:.4f}, p-value={p:.4g}")
+                st.write("→ Dépendance significative" if p<0.05 else "→ Pas de dépendance significative")
+
+                fig, ax = plt.subplots()
+                sns.heatmap(pd.crosstab(df[var1], df[var2]), annot=True, fmt="d", cmap="coolwarm", ax=ax)
+                ax.set_title(f"{test_name} : {var1} vs {var2}")
+                st.pyplot(fig)
 
     # --- 4️⃣ Régression linéaire multiple ---
     if len(num_vars) > 1:
         st.subheader("4️⃣ Régression linéaire multiple")
-        if st.checkbox("Exécuter régression linéaire multiple"):
+        if "run_regression" not in st.session_state:
+            st.session_state["run_regression"] = False
+        run_regression = st.checkbox("Exécuter régression linéaire multiple", value=st.session_state["run_regression"])
+        st.session_state["run_regression"] = run_regression
+
+        if run_regression:
             X = df[num_vars].dropna()
             cible = st.selectbox("Variable dépendante :", num_vars)
             y = X[cible]
@@ -169,7 +206,12 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     # --- 5️⃣ PCA ---
     if len(num_vars) > 1:
         st.subheader("5️⃣ Analyse en Composantes Principales (PCA)")
-        if st.checkbox("Exécuter PCA"):
+        if "run_pca" not in st.session_state:
+            st.session_state["run_pca"] = False
+        run_pca = st.checkbox("Exécuter PCA", value=st.session_state["run_pca"])
+        st.session_state["run_pca"] = run_pca
+
+        if run_pca:
             X_scaled = StandardScaler().fit_transform(df[num_vars].dropna())
             pca = PCA()
             components = pca.fit_transform(X_scaled)
@@ -191,7 +233,12 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     # --- 6️⃣ MCA pour variables catégorielles ---
     if len(cat_vars) > 1:
         st.subheader("6️⃣ Analyse des Correspondances Multiples (MCA)")
-        if st.checkbox("Exécuter MCA"):
+        if "run_mca" not in st.session_state:
+            st.session_state["run_mca"] = False
+        run_mca = st.checkbox("Exécuter MCA", value=st.session_state["run_mca"])
+        st.session_state["run_mca"] = run_mca
+
+        if run_mca:
             try:
                 import prince
                 df_cat = df[cat_vars].fillna("Missing")
@@ -240,7 +287,13 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     st.subheader("7️⃣ Régression logistique pour variables binaires")
     for cat in cat_vars:
         if df[cat].dropna().nunique()==2:
-            if st.checkbox(f"Exécuter régression logistique : {cat}"):
+            key_log = f"logistic_{cat}"
+            if key_log not in st.session_state:
+                st.session_state[key_log] = False
+            run_log = st.checkbox(f"Exécuter régression logistique : {cat}", value=st.session_state[key_log])
+            st.session_state[key_log] = run_log
+
+            if run_log:
                 X = df[num_vars].dropna()
                 y = df[cat].loc[X.index]
                 model = LogisticRegression(max_iter=1000)
