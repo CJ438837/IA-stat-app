@@ -2,27 +2,23 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import streamlit as st
+from io import BytesIO
 
-
-def plot_descriptive(df, types_df, output_folder="plots"):
+def plot_descriptive(df, types_df):
     """
-    Génère automatiquement les graphiques pour les variables détectées.
-    
+    Génère automatiquement les graphiques pour les variables détectées
+    et les affiche dans Streamlit.
+
     Args:
         df (DataFrame) : données nettoyées
         types_df (DataFrame) : tableau des types détectés
-        output_folder (str) : dossier où enregistrer les graphiques
     """
-    import os
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
     # --- 1️⃣ Graphiques univariés ---
     for _, row in types_df.iterrows():
         col = row['variable']
         var_type = row['type']
         col_data = df[col].dropna()
-
         if col_data.empty:
             continue
 
@@ -30,9 +26,8 @@ def plot_descriptive(df, types_df, output_folder="plots"):
         plt.title(f"{col} ({var_type})")
 
         if var_type == "numérique":
-    # Vérifie si toutes les valeurs sont des entiers
             if np.all(col_data.dropna() == col_data.dropna().astype(int)):
-                bins = np.arange(col_data.min() - 0.5, col_data.max() + 1.5, 1)  # un bin par entier
+                bins = np.arange(col_data.min() - 0.5, col_data.max() + 1.5, 1)
                 sns.histplot(col_data, bins=bins, color='skyblue', kde=False)
             else:
                 sns.histplot(col_data, kde=True, bins=20, color='skyblue')
@@ -43,9 +38,14 @@ def plot_descriptive(df, types_df, output_folder="plots"):
             sns.countplot(x=col_data, palette="Set2")
             plt.xlabel(col)
             plt.ylabel("Effectif")
-        
+
         plt.tight_layout()
-        plt.savefig(f"{output_folder}/{col}_univariate.png")
+        
+        # Affichage Streamlit
+        buf = BytesIO()
+        plt.savefig(buf, format="png")
+        buf.seek(0)
+        st.image(buf, caption=f"{col} ({var_type})", use_column_width=True)
         plt.close()
 
     # --- 2️⃣ Graphiques bivariés ---
@@ -62,7 +62,10 @@ def plot_descriptive(df, types_df, output_folder="plots"):
             plt.ylabel(y)
             plt.title(f"{x} vs {y}")
             plt.tight_layout()
-            plt.savefig(f"{output_folder}/{x}_vs_{y}_scatter.png")
+            buf = BytesIO()
+            plt.savefig(buf, format="png")
+            buf.seek(0)
+            st.image(buf, caption=f"{x} vs {y}", use_column_width=True)
             plt.close()
 
     # Numérique vs catégorielle → boxplots
@@ -74,7 +77,10 @@ def plot_descriptive(df, types_df, output_folder="plots"):
             plt.ylabel(num)
             plt.title(f"{num} vs {cat}")
             plt.tight_layout()
-            plt.savefig(f"{output_folder}/{num}_vs_{cat}_boxplot.png")
+            buf = BytesIO()
+            plt.savefig(buf, format="png")
+            buf.seek(0)
+            st.image(buf, caption=f"{num} vs {cat}", use_column_width=True)
             plt.close()
 
     # Matrice de corrélation pour variables numériques
@@ -84,5 +90,8 @@ def plot_descriptive(df, types_df, output_folder="plots"):
         sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm")
         plt.title("Matrice de corrélation")
         plt.tight_layout()
-        plt.savefig(f"{output_folder}/correlation_heatmap.png")
+        buf = BytesIO()
+        plt.savefig(buf, format="png")
+        buf.seek(0)
+        st.image(buf, caption="Matrice de corrélation", use_column_width=True)
         plt.close()
