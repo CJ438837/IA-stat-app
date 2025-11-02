@@ -1,6 +1,3 @@
-from deep_translator import GoogleTranslator
-
-keywords_en = [GoogleTranslator(source='fr', target='en').translate(word) for word in keywords_fr]
 import streamlit as st
 import pandas as pd
 import re
@@ -34,9 +31,6 @@ if uploaded_file is not None:
                                 "pour","sur","dans","par","au","a","ce","ces","est","sont","ou","où",
                                 "se","sa","son","que","qui","ne","pas","plus","moins","comme","donc"])
             keywords_fr = [w for w in tokens if w not in stopwords_fr]
-
-            translator = Translator()
-            keywords_en = [translator.translate(word, src='fr', dest='en').text for word in keywords_fr]
 
             st.markdown("### 🧩 Mots-clés extraits")
             st.write(f"**Français :** {keywords_fr}")
