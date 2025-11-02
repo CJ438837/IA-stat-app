@@ -1,6 +1,6 @@
 streamlit
 pandas
-googletrans
+deep-translator
 biopython
 stripe
 openpyxl
