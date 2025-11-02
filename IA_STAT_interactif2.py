@@ -29,4 +29,7 @@ def propose_tests_interactif(types_df, distribution_df, df, keywords):
     if test_mannwhitney:
         tests_selectionnes.append({"nom": "Mann-Whitney", "type": "mannwhitney", "variables": ("Age", "Poids")})
 
+    # Stocke les tests sélectionnés dans session_state pour la page résultats
+    st.session_state["tests_selectionnes"] = tests_selectionnes
+
     return tests_selectionnes
