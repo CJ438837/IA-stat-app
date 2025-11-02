@@ -32,7 +32,7 @@ if uploaded_file is not None:
         st.write(f"**Mots-clés détectés :** {keywords}")
 
         # --- Détection des types ---
-        types_dict, data_dict_adapted = detect_variable_types(df)
+        types_dict, data_dict_adapted = detect_variable_types_df(df)
         types_df = types_dict["data"]
         df = data_dict_adapted["data"]
 
