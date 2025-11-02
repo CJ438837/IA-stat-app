@@ -3,4 +3,5 @@ pandas
 biopython
 openpyxl
 scipy
+matplotlib
 stripe
