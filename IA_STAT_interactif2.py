@@ -21,7 +21,7 @@ def rechercher_pubmed_test(test_name, mots_cles, email="votre.email@example.com"
     liens = [f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" for pmid in pmids]
     return liens
 
-# --- Fonction interactive complète corrigée ---
+# --- Fonction interactive complète avec forms ---
 def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
     num_vars = types_df[types_df['type']=="numérique"]['variable'].tolist()
     cat_vars = types_df[types_df['type'].isin(['catégorielle','binaire'])]['variable'].tolist()
@@ -42,48 +42,36 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
             test_options = ["unknown"]
 
         with st.expander(f"{num} vs {cat}"):
-            key_test = f"{num}_{cat}"
-            test_name = st.selectbox("Choisir le test :", test_options, key=key_test)
+            with st.form(f"form_numcat_{num}_{cat}"):
+                test_name = st.selectbox("Choisir le test :", test_options)
+                apparie = False
+                if test_name in ["t-test","Mann-Whitney"]:
+                    apparie = st.radio("Données appariées ?", [False, True])
+                submit = st.form_submit_button("Exécuter le test")
+                if submit:
+                    groupes = df.groupby(cat)[num].apply(list)
+                    try:
+                        if test_name == "t-test":
+                            stat, p = stats.ttest_rel(groupes.iloc[0], groupes.iloc[1]) if apparie else stats.ttest_ind(groupes.iloc[0], groupes.iloc[1])
+                        elif test_name == "Mann-Whitney":
+                            stat, p = stats.wilcoxon(groupes.iloc[0], groupes.iloc[1]) if apparie else stats.mannwhitneyu(groupes.iloc[0], groupes.iloc[1])
+                        elif test_name == "ANOVA":
+                            stat, p = stats.f_oneway(*groupes)
+                        elif test_name == "Kruskal-Wallis":
+                            stat, p = stats.kruskal(*groupes)
+                        else:
+                            stat, p = None, None
 
-            apparie = False
-            if test_name in ["t-test","Mann-Whitney"]:
-                key_apparie = f"apparie_{num}_{cat}"
-                st.radio("Données appariées ?", [False, True], index=0, key=key_apparie)
-                apparie = st.session_state.get(key_apparie, False)
+                        if stat is not None:
+                            st.write(f"Statistique = {stat:.4f}, p-value = {p:.4g}")
+                            st.write("→ Impact significatif" if p<0.05 else "→ Pas d'impact significatif")
 
-            # PubMed
-            liens = rechercher_pubmed_test(test_name, mots_cles)
-            if liens:
-                st.markdown("**Articles PubMed suggérés :**")
-                for lien in liens:
-                    st.markdown(f"- [{lien}]({lien})")
-
-            # Exécution test
-            key_exec = f"exec_{num}_{cat}"
-            if st.button(f"Exécuter le test {test_name}", key=key_exec):
-                groupes = df.groupby(cat)[num].apply(list)
-                try:
-                    if test_name == "t-test":
-                        stat, p = stats.ttest_rel(groupes.iloc[0], groupes.iloc[1]) if apparie else stats.ttest_ind(groupes.iloc[0], groupes.iloc[1])
-                    elif test_name == "Mann-Whitney":
-                        stat, p = stats.wilcoxon(groupes.iloc[0], groupes.iloc[1]) if apparie else stats.mannwhitneyu(groupes.iloc[0], groupes.iloc[1])
-                    elif test_name == "ANOVA":
-                        stat, p = stats.f_oneway(*groupes)
-                    elif test_name == "Kruskal-Wallis":
-                        stat, p = stats.kruskal(*groupes)
-                    else:
-                        stat, p = None, None
-
-                    if stat is not None:
-                        st.write(f"Statistique = {stat:.4f}, p-value = {p:.4g}")
-                        st.write("→ Impact significatif" if p<0.05 else "→ Pas d'impact significatif")
-
-                    fig, ax = plt.subplots()
-                    sns.boxplot(x=cat, y=num, data=df, ax=ax)
-                    ax.set_title(f"{test_name} : {num} vs {cat}")
-                    st.pyplot(fig)
-                except Exception as e:
-                    st.error(f"Erreur : {e}")
+                        fig, ax = plt.subplots()
+                        sns.boxplot(x=cat, y=num, data=df, ax=ax)
+                        ax.set_title(f"{test_name} : {num} vs {cat}")
+                        st.pyplot(fig)
+                    except Exception as e:
+                        st.error(f"Erreur : {e}")
 
     # --- 2️⃣ Deux variables numériques ---
     st.subheader("2️⃣ Corrélations numériques")
@@ -93,174 +81,170 @@ def propose_tests_interactif(types_df, distribution_df, df, mots_cles):
         test_type = "Pearson" if verdict1=="Normal" and verdict2=="Normal" else "Spearman"
 
         with st.expander(f"Corrélation : {var1} vs {var2}"):
-            liens = rechercher_pubmed_test(f"{test_type} correlation", mots_cles)
-            if liens:
-                st.markdown("**Articles PubMed :**")
-                for lien in liens:
-                    st.markdown(f"- [{lien}]({lien})")
+            with st.form(f"form_corr_{var1}_{var2}"):
+                submit = st.form_submit_button(f"Exécuter la corrélation {var1} vs {var2}")
+                if submit:
+                    corr, p = stats.pearsonr(df[var1].dropna(), df[var2].dropna()) if test_type=="Pearson" else stats.spearmanr(df[var1].dropna(), df[var2].dropna())
+                    st.write(f"Corrélation = {corr:.4f}, p-value = {p:.4g}")
+                    st.write("→ Corrélation significative" if p<0.05 else "→ Pas de corrélation significative")
 
-            key_corr = f"corr_{var1}_{var2}"
-            if st.button(f"Exécuter la corrélation {var1} vs {var2}", key=key_corr):
-                corr, p = stats.pearsonr(df[var1].dropna(), df[var2].dropna()) if test_type=="Pearson" else stats.spearmanr(df[var1].dropna(), df[var2].dropna())
-                st.write(f"Corrélation = {corr:.4f}, p-value = {p:.4g}")
-                st.write("→ Corrélation significative" if p<0.05 else "→ Pas de corrélation significative")
-
-                fig, ax = plt.subplots()
-                sns.scatterplot(x=var1, y=var2, data=df, ax=ax)
-                ax.set_title(f"Corrélation ({test_type}) : {var1} vs {var2}")
-                st.pyplot(fig)
+                    fig, ax = plt.subplots()
+                    sns.scatterplot(x=var1, y=var2, data=df, ax=ax)
+                    ax.set_title(f"Corrélation ({test_type}) : {var1} vs {var2}")
+                    st.pyplot(fig)
 
     # --- 3️⃣ Deux variables catégorielles ---
     st.subheader("3️⃣ Variables catégorielles")
     for var1, var2 in itertools.combinations(cat_vars, 2):
         with st.expander(f"{var1} vs {var2}"):
-            liens = rechercher_pubmed_test("Chi-square test", mots_cles)
-            if liens:
-                st.markdown("**Articles PubMed :**")
-                for lien in liens:
-                    st.markdown(f"- [{lien}]({lien})")
+            with st.form(f"form_cat_{var1}_{var2}"):
+                submit = st.form_submit_button(f"Exécuter test catégoriel {var1} vs {var2}")
+                if submit:
+                    contingency_table = pd.crosstab(df[var1], df[var2])
+                    try:
+                        if contingency_table.size <= 4:
+                            stat, p = stats.fisher_exact(contingency_table)
+                            test_name = "Fisher exact"
+                        else:
+                            stat, p, dof, expected = stats.chi2_contingency(contingency_table)
+                            test_name = "Chi²"
+                        st.write(f"{test_name} : statistique={stat:.4f}, p-value={p:.4g}")
+                        st.write("→ Dépendance significative" if p<0.05 else "→ Pas de dépendance significative")
 
-            key_cat = f"cat_{var1}_{var2}"
-            if st.button(f"Exécuter test catégoriel {var1} vs {var2}", key=key_cat):
-                contingency_table = pd.crosstab(df[var1], df[var2])
-                try:
-                    if contingency_table.size <= 4:
-                        stat, p = stats.fisher_exact(contingency_table)
-                        test_name = "Fisher exact"
-                    else:
-                        stat, p, dof, expected = stats.chi2_contingency(contingency_table)
-                        test_name = "Chi²"
-                    st.write(f"{test_name} : statistique={stat:.4f}, p-value={p:.4g}")
-                    st.write("→ Dépendance significative" if p<0.05 else "→ Pas de dépendance significative")
-
-                    fig, ax = plt.subplots()
-                    sns.heatmap(contingency_table, annot=True, fmt="d", cmap="coolwarm", ax=ax)
-                    ax.set_title(f"{test_name} : {var1} vs {var2}")
-                    st.pyplot(fig)
-                except Exception as e:
-                    st.error(f"Erreur : {e}")
+                        fig, ax = plt.subplots()
+                        sns.heatmap(contingency_table, annot=True, fmt="d", cmap="coolwarm", ax=ax)
+                        ax.set_title(f"{test_name} : {var1} vs {var2}")
+                        st.pyplot(fig)
+                    except Exception as e:
+                        st.error(f"Erreur : {e}")
 
     # --- 4️⃣ Régression linéaire multiple ---
     st.subheader("4️⃣ Régression linéaire multiple")
-    key_linreg = "execute_linreg"
-    st.checkbox("Exécuter régression linéaire multiple", key=key_linreg)
-    if st.session_state.get(key_linreg, False) and len(num_vars) > 1:
-        X = df[num_vars].dropna()
-        cible = st.selectbox("Variable dépendante :", num_vars)
-        y = X[cible]
-        X_pred = X.drop(columns=[cible])
-        model = LinearRegression()
-        model.fit(X_pred, y)
-        y_pred = model.predict(X_pred)
-        residus = y - y_pred
+    if len(num_vars) > 1:
+        with st.form("form_linreg"):
+            cible = st.selectbox("Variable dépendante :", num_vars)
+            submit = st.form_submit_button("Exécuter régression linéaire multiple")
+            if submit:
+                X = df[num_vars].dropna()
+                y = X[cible]
+                X_pred = X.drop(columns=[cible])
+                model = LinearRegression()
+                model.fit(X_pred, y)
+                y_pred = model.predict(X_pred)
+                residus = y - y_pred
 
-        st.write(f"R² = {model.score(X_pred, y):.4f}")
-        stat, p = stats.shapiro(residus)
-        st.write(f"Shapiro-Wilk résidus : stat={stat:.4f}, p={p:.4g}")
-        st.write("Résidus normalement distribués" if p>0.05 else "⚠️ Résidus non normaux")
+                st.write(f"R² = {model.score(X_pred, y):.4f}")
+                stat, p = stats.shapiro(residus)
+                st.write(f"Shapiro-Wilk résidus : stat={stat:.4f}, p={p:.4g}")
+                st.write("Résidus normalement distribués" if p>0.05 else "⚠️ Résidus non normaux")
 
-        coef_df = pd.DataFrame({"Variable": X_pred.columns, "Coefficient": model.coef_})
-        st.table(coef_df)
-        st.write(f"Intercept : {model.intercept_:.4f}")
+                coef_df = pd.DataFrame({"Variable": X_pred.columns, "Coefficient": model.coef_})
+                st.table(coef_df)
+                st.write(f"Intercept : {model.intercept_:.4f}")
 
-        fig, axes = plt.subplots(2,2, figsize=(12,10))
-        sns.scatterplot(x=y_pred, y=residus, ax=axes[0,0])
-        axes[0,0].axhline(0, color='red', linestyle='--')
-        axes[0,0].set_title("Résidus vs Prédit")
-        sns.histplot(residus, kde=True, ax=axes[0,1], color='skyblue')
-        axes[0,1].set_title("Distribution résidus")
-        stats.probplot(residus, dist="norm", plot=axes[1,0])
-        axes[1,0].set_title("QQ-Plot résidus")
-        sns.scatterplot(x=y, y=y_pred, ax=axes[1,1])
-        axes[1,1].plot([y.min(), y.max()], [y.min(), y.max()], color='red', linestyle='--')
-        axes[1,1].set_title("Observé vs Prédit")
-        plt.tight_layout()
-        st.pyplot(fig)
+                fig, axes = plt.subplots(2,2, figsize=(12,10))
+                sns.scatterplot(x=y_pred, y=residus, ax=axes[0,0])
+                axes[0,0].axhline(0, color='red', linestyle='--')
+                axes[0,0].set_title("Résidus vs Prédit")
+                sns.histplot(residus, kde=True, ax=axes[0,1], color='skyblue')
+                axes[0,1].set_title("Distribution résidus")
+                stats.probplot(residus, dist="norm", plot=axes[1,0])
+                axes[1,0].set_title("QQ-Plot résidus")
+                sns.scatterplot(x=y, y=y_pred, ax=axes[1,1])
+                axes[1,1].plot([y.min(), y.max()], [y.min(), y.max()], color='red', linestyle='--')
+                axes[1,1].set_title("Observé vs Prédit")
+                plt.tight_layout()
+                st.pyplot(fig)
 
     # --- 5️⃣ PCA ---
     st.subheader("5️⃣ Analyse en Composantes Principales (PCA)")
-    key_pca = "execute_pca"
-    st.checkbox("Exécuter PCA", key=key_pca)
-    if st.session_state.get(key_pca, False) and len(num_vars) > 1:
-        X_scaled = StandardScaler().fit_transform(df[num_vars].dropna())
-        pca = PCA()
-        components = pca.fit_transform(X_scaled)
-        explained_variance = pca.explained_variance_ratio_
-        cum_var = explained_variance.cumsum()
-        n_comp = (cum_var<0.8).sum()+1
-        st.write(f"{n_comp} composantes expliquent ~80% de la variance")
-        loading_matrix = pd.DataFrame(pca.components_.T, index=num_vars,
-                                      columns=[f"PC{i+1}" for i in range(len(num_vars))])
-        st.write(loading_matrix.iloc[:,:n_comp])
+    if len(num_vars) > 1:
+        with st.form("form_pca"):
+            submit = st.form_submit_button("Exécuter PCA")
+            if submit:
+                X_scaled = StandardScaler().fit_transform(df[num_vars].dropna())
+                pca = PCA()
+                components = pca.fit_transform(X_scaled)
+                explained_variance = pca.explained_variance_ratio_
+                cum_var = explained_variance.cumsum()
+                n_comp = (cum_var<0.8).sum()+1
+                st.write(f"{n_comp} composantes expliquent ~80% de la variance")
+                loading_matrix = pd.DataFrame(pca.components_.T, index=num_vars,
+                                              columns=[f"PC{i+1}" for i in range(len(num_vars))])
+                st.write(loading_matrix.iloc[:,:n_comp])
 
-        fig, ax = plt.subplots()
-        ax.scatter(components[:,0], components[:,1])
-        ax.set_xlabel("PC1")
-        ax.set_ylabel("PC2")
-        ax.set_title("Projection individus PC1 vs PC2")
-        st.pyplot(fig)
+                fig, ax = plt.subplots()
+                ax.scatter(components[:,0], components[:,1])
+                ax.set_xlabel("PC1")
+                ax.set_ylabel("PC2")
+                ax.set_title("Projection individus PC1 vs PC2")
+                st.pyplot(fig)
 
     # --- 6️⃣ MCA ---
     st.subheader("6️⃣ Analyse des Correspondances Multiples (MCA)")
-    key_mca = "execute_mca"
-    st.checkbox("Exécuter MCA", key=key_mca)
-    if st.session_state.get(key_mca, False) and len(cat_vars) > 1:
-        try:
-            import prince
-            df_cat = df[cat_vars].fillna("Missing")
-            mca = prince.MCA(n_components=2, random_state=42)
-            mca = mca.fit(df_cat)
+    if len(cat_vars) > 1:
+        with st.form("form_mca"):
+            submit = st.form_submit_button("Exécuter MCA")
+            if submit:
+                try:
+                    import prince
+                    df_cat = df[cat_vars].fillna("Missing")
+                    mca = prince.MCA(n_components=2, random_state=42)
+                    mca = mca.fit(df_cat)
 
-            var_expl = mca.explained_inertia_ if hasattr(mca,"explained_inertia_") else mca.explained_variance_ratio_
-            st.write(f"Variance expliquée : {var_expl[0]*100:.2f}%, {var_expl[1]*100:.2f}%")
-            coords = mca.column_coordinates(df_cat)
-            ind_coords = mca.row_coordinates(df_cat)
+                    var_expl = mca.explained_inertia_ if hasattr(mca,"explained_inertia_") else mca.explained_variance_ratio_
+                    st.write(f"Variance expliquée : {var_expl[0]*100:.2f}%, {var_expl[1]*100:.2f}%")
+                    coords = mca.column_coordinates(df_cat)
+                    ind_coords = mca.row_coordinates(df_cat)
 
-            fig, ax = plt.subplots()
-            ax.scatter(ind_coords[0], ind_coords[1], alpha=0.6)
-            ax.set_xlabel("Dim 1")
-            ax.set_ylabel("Dim 2")
-            ax.set_title("Projection individus MCA")
-            st.pyplot(fig)
+                    # Projection individus
+                    fig, ax = plt.subplots()
+                    ax.scatter(ind_coords[0], ind_coords[1], alpha=0.6)
+                    ax.set_xlabel("Dim 1")
+                    ax.set_ylabel("Dim 2")
+                    ax.set_title("Projection individus MCA")
+                    st.pyplot(fig)
 
-            fig, ax = plt.subplots()
-            ax.scatter(coords[0], coords[1], color='red', alpha=0.7)
-            for i, label in enumerate(coords.index):
-                ax.text(coords.iloc[i,0], coords.iloc[i,1], label, fontsize=9, color='darkred')
-            ax.set_xlabel("Dim 1")
-            ax.set_ylabel("Dim 2")
-            ax.set_title("Projection catégories MCA")
-            st.pyplot(fig)
+                    # Projection catégories
+                    fig, ax = plt.subplots()
+                    ax.scatter(coords[0], coords[1], color='red', alpha=0.7)
+                    for i, label in enumerate(coords.index):
+                        ax.text(coords.iloc[i,0], coords.iloc[i,1], label, fontsize=9, color='darkred')
+                    ax.set_xlabel("Dim 1")
+                    ax.set_ylabel("Dim 2")
+                    ax.set_title("Projection catégories MCA")
+                    st.pyplot(fig)
 
-            fig, ax = plt.subplots(figsize=(6,6))
-            circle = plt.Circle((0,0),1, color='gray', fill=False)
-            ax.add_artist(circle)
-            for i, label in enumerate(coords.index):
-                ax.arrow(0,0, coords.iloc[i,0], coords.iloc[i,1], color='blue', alpha=0.5, head_width=0.03)
-                ax.text(coords.iloc[i,0]*1.1, coords.iloc[i,1]*1.1, label, color='blue', ha='center', va='center', fontsize=8)
-            ax.set_xlim(-1.1,1.1)
-            ax.set_ylim(-1.1,1.1)
-            ax.axhline(0,color='gray',lw=0.5)
-            ax.axvline(0,color='gray',lw=0.5)
-            ax.set_title("Cercle des corrélations (MCA)")
-            st.pyplot(fig)
-        except ImportError:
-            st.warning("⚠️ Module 'prince' non installé. Exécutez : pip install prince")
-        except Exception as e:
-            st.error(f"Erreur MCA : {e}")
+                    # Cercle des corrélations
+                    fig, ax = plt.subplots(figsize=(6,6))
+                    circle = plt.Circle((0,0),1, color='gray', fill=False)
+                    ax.add_artist(circle)
+                    for i, label in enumerate(coords.index):
+                        ax.arrow(0,0, coords.iloc[i,0], coords.iloc[i,1], color='blue', alpha=0.5, head_width=0.03)
+                        ax.text(coords.iloc[i,0]*1.1, coords.iloc[i,1]*1.1, label, color='blue', ha='center', va='center', fontsize=8)
+                    ax.set_xlim(-1.1,1.1)
+                    ax.set_ylim(-1.1,1.1)
+                    ax.axhline(0,color='gray',lw=0.5)
+                    ax.axvline(0,color='gray',lw=0.5)
+                    ax.set_title("Cercle des corrélations (MCA)")
+                    st.pyplot(fig)
+                except ImportError:
+                    st.warning("⚠️ Module 'prince' non installé. Exécutez : pip install prince")
+                except Exception as e:
+                    st.error(f"Erreur MCA : {e}")
 
     # --- 7️⃣ Régression logistique ---
     st.subheader("7️⃣ Régression logistique pour variables binaires")
     for cat in cat_vars:
         if df[cat].dropna().nunique()==2:
-            key_log = f"logreg_{cat}"
-            st.checkbox(f"Exécuter régression logistique : {cat}", key=key_log)
-            if st.session_state.get(key_log, False):
-                X = df[num_vars].dropna()
-                y = df[cat].loc[X.index]
-                model = LogisticRegression(max_iter=1000)
-                model.fit(X, y)
-                st.write("Coefficients :", dict(zip(num_vars, model.coef_[0])))
-                st.write(f"Intercept : {model.intercept_[0]}")
+            with st.form(f"form_logreg_{cat}"):
+                submit = st.form_submit_button(f"Exécuter régression logistique : {cat}")
+                if submit:
+                    X = df[num_vars].dropna()
+                    y = df[cat].loc[X.index]
+                    model = LogisticRegression(max_iter=1000)
+                    model.fit(X, y)
+                    st.write("Coefficients :", dict(zip(num_vars, model.coef_[0])))
+                    st.write(f"Intercept : {model.intercept_[0]}")
 
     st.success("✅ Tous les tests interactifs terminés")
