@@ -1,5 +1,6 @@
 streamlit
 pandas
 biopython
-stripe
 openpyxl
+scipy
+stripe
