@@ -6,4 +6,5 @@ scipy
 matplotlib
 seaborn
 fitter
+scikit-learn
 stripe
